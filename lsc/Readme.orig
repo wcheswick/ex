@@ -1,0 +1,144 @@
+These notes are for the May 7, 1995 version of this program.
+
+
+The disk
+
+The disk contains the program, images, and support files you need to
+run the exhibit.  Everything fits on one floppy disk (still) thanks
+to some compression.   When the floppy is booted, it copies stuff
+into the ram disk and runs from there.  You should have at least 5MB
+of RAM: I believe you said you have 8, which is plenty.
+
+The software will work on a PC that has a hard drive.  See autoexec.bat
+for how I determine where to store stuff.  You may have to modify
+it a bit.
+
+The disk contains a couple of useful extra programs: edlin, pkarc, and
+pkxarc.  pkxarc is used to uncompress the packed stuff.  pkarc is
+included so you ccan repack stuff if you want to change anything.
+edlin is handy for editing autoexec.bat.
+
+The disk also contains the source code for the entire program, also
+compressed.  If you have the targa libraries and a reasonable Microsoft
+C compiler, you could compile it yourself.
+
+I believe the main loop of the program (at the end of the file
+chat.c) would make a good wall display near the exhibit
+to demonstrate the different
+states of the program.  
+
+
+Switches
+
+There are several software switches that will certainly have to be
+tweeked for this program.  Each of these switches are added to the
+'chat' command, and adjust the video and chroma key performance of
+the program and targa card.
+
+Switch	value	function
+
+c	0-31	targa contrast
+h	0-31	targa hue
+s	0-31	targa saturation
+
+r	0-31	maximum red value for keying
+g	0-31	maximum green value for keying
+b	0-31	minimum blue value for keying
+
+
+Chroma key
+
+The chroma keying is done in software.   The targa hardware chroma
+key is not useful, since when we grab the picture we do not yet know
+which background to key into the picture.  The software chroma key
+is quite fast:  you can't notice it in the transform time.
+
+You have two tools to get the keying right:  the color level switches
+described above, and the secret 'a' command.  The model I used for
+keying was this:  if the blue is above a certain level, and red and
+green are below certain levels, then the background is copied into
+the pixel.  (There are other ways to do this, like a major miss-correllation
+in the blue and green values, which usually track each other very well.)
+
+The 'a' command scans the last image grabbed and reports the average r, g, and b
+values.  (It messes up the display:  you don't
+want users typing at the keyboard.)  So, start the program, turn on the
+chroma key lights, step out of the picture (so it is just blue), grab
+the image, and type 'a'.
+
+The values displayed should guide your choice of chroma limits.  For example,
+my crummy sheet and yellow light give an image that reports:
+	11 13 23
+so chroma values for red and green need to be a little higher, and blue
+a bit lower.  I use:
+	chat -r 13 -g 15 -b 18
+
+These are really lousy values.  I hope your r,g,b values will be something
+like 1,3,28 and you will be able to run
+	chat -r 2 -g 4 -b 26
+You may have to fiddle with contrast the other options.
+
+By the way, when you have figured out the switch settings you like,
+edit the autoexec.bat file on the disk, and send me the values so
+I can make them the program's default.
+
+I hope these tools are enough.  If not, you should turn off the keying
+for now:
+	chat -r 0 -g 0 -b 31
+and I will attempt to improve things when I get back.
+
+
+Secret keyboard commands.
+
+The keyboard is intended for administrative use only.  These
+come and go as debugging and needs change.  These may be typed
+at any time, and will be executed when the program isn't busy
+transforming an image.  The commands are single character commands.
+No prompts are given, and no Enter key is used.  Unknown entries
+are ignored.
+
+key	function
+a	compute and display the average r, g, and b values for the
+	entire screen
+
+x,X	quit the program
+
+w	write the current image to ram disk.  This can be useful
+	if you have just taken the picture of a mucky-muck and you
+	want to save it for some reason.  The file names will
+	be 'saved1.tga', 'saved2.tga', ...
+
+
+Bugs.
+
+The supplied chroma key background for early impressionism was blank.
+You should install the correct one in tga.arc on the disk.
+
+As I mentioned for the previous disk, there have been ongoing crashing
+problems relating to some sort of stack overwrite during the Cubism
+function.   I have twiddled the code, and no further misadventures have
+shown up.  The best test seems to be to let the system run in the attract
+loop for a long time and see if unything untoward happens.  You folks
+said you had no problems with this with the previous software, so perhaps
+it is some unfortunate interaction with my system.
+
+
+Future work
+
+Time has not allowed me to do all I wish with this program.  (The paying
+customers come first.)  Further work is needed on the following:
+
+
+	- the chroma key stuff is insufficiently tested, since I have
+	poor lighting and a poor camera installed at home at present.
+
+	- the descriptive text needs to be overlaid on the samples
+	in the attract loop.  I'll have to find out what the targa
+	text routines are.  The name at the top is a kluge that uses
+	the ROM-based fonts found in a PC(!).
+
+	- the button layout needs improvement to match the request.
+
+	- The timer bar becomes shorter than the 'seconds left' label,
+	which looks a little ugly.
+

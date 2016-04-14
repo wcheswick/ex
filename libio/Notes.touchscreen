@@ -1,0 +1,175 @@
+http://lists.freebsd.org/pipermail/freebsd-hardware/2004-June/001637.html
+
+##################### tstouch.c ######################
+#include <sys/types.h>
+#include <sys/ioctl.h>
+#include <sys/uio.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <unistd.h>
+
+#include <dev/usb/usb.h>
+
+int
+main(int argc, char **argv)
+{
+	unsigned char txb[4], rxb[100];
+	int fd, wrfd, ret, x, y;
+	usb_device_descriptor_t usbdd;
+	struct usb_ctl_request req;
+
+	wrfd = open("/dev/ugen0", O_RDWR);
+	if (wrfd == -1) {
+		printf("Oops(1), could not open ugen0\n");
+		return 1;
+	}
+	ret = ioctl(wrfd, USB_GET_DEVICE_DESC, &usbdd);
+	if (ret == -1) {
+		printf("ioctl error\n");
+		return 1;
+	}
+	printf("idVendor 0x%X\n", UGETW(usbdd.idVendor));
+	printf("idProduct 0x%X\n", UGETW(usbdd.idProduct));
+
+	fd = open("/dev/ugen0.1", O_RDONLY);
+	if (fd == -1) {
+		printf("Oops(1), could not open ugen0.1\n");
+		return 1;
+	}
+	txb[0] = 0x0a;
+	txb[1] = 0x01;
+	txb[2] = 'A';
+	req.ucr_request.bmRequestType = UT_WRITE_VENDOR_DEVICE;
+	req.ucr_request.bRequest = 0;
+	USETW(req.ucr_request.wValue, 0);
+	USETW(req.ucr_request.wIndex, 0);
+	USETW(req.ucr_request.wLength, 3);
+	req.ucr_data = txb;
+	ret = ioctl(wrfd, USB_DO_REQUEST, &req);
+	if (ret != 0) {
+		printf("Oops ioctl returned %d\n", ret);
+		return 1;
+	}
+
+	ret = read(fd, rxb, 3);
+	if (ret != 3) {
+		printf("Oops(3) only read %d bytes\n", ret);
+		return 1;
+	}
+	printf("Check Active %2X %2X %c\n", rxb[0], rxb[1], rxb[2]);
+
+	usleep(5000);
+	txb[0] = 0x0a;
+	txb[1] = 0x01;
+	txb[2] = 'D';
+	req.ucr_request.bmRequestType = UT_WRITE_VENDOR_DEVICE;
+	req.ucr_request.bRequest = 0;
+	USETW(req.ucr_request.wValue, 0);
+	USETW(req.ucr_request.wIndex, 0);
+	USETW(req.ucr_request.wLength, 3);
+	req.ucr_data = txb;
+	ret = ioctl(wrfd, USB_DO_REQUEST, &req);
+	if (ret != 0) {
+		printf("Oops ioctl returned %d\n", ret);
+		return 1;
+	}
+
+	ret = read(fd, rxb, 2);
+	if (ret != 2) {
+		printf("Oops(3) only read %d bytes\n", ret);
+		return 1;
+	}
+	ret = read(fd, &rxb[2], rxb[1]);
+	if (ret < 2) {
+		printf("Oops(3) only read %d bytes\n", ret);
+		return 1;
+	}
+	rxb[2 + rxb[1]] = '\0';
+	printf("Firmware  %2X %2X %c %s\n", rxb[0], rxb[1], rxb[2], &rxb[3]);
+
+	usleep(5000);
+	txb[0] = 0x0a;
+	txb[1] = 0x01;
+	txb[2] = 'E';
+	req.ucr_request.bmRequestType = UT_WRITE_VENDOR_DEVICE;
+	req.ucr_request.bRequest = 0;
+	USETW(req.ucr_request.wValue, 0);
+	USETW(req.ucr_request.wIndex, 0);
+	USETW(req.ucr_request.wLength, 3);
+	req.ucr_data = txb;
+	ret = ioctl(wrfd, USB_DO_REQUEST, &req);
+	if (ret != 0) {
+		printf("Oops ioctl returned %d\n", ret);
+		return 1;
+	}
+
+	ret = read(fd, rxb, 2);
+	if (ret != 2) {
+		printf("Oops(3) only read %d bytes\n", ret);
+		return 1;
+	}
+	ret = read(fd, &rxb[2], rxb[1]);
+	if (ret < 2) {
+		printf("Oops(3) only read %d bytes\n", ret);
+		return 1;
+	}
+	rxb[2 + rxb[1]] = '\0';
+	printf("Type  %2X %2X %c %s\n", rxb[0], rxb[1], rxb[2], &rxb[3]);
+
+
+	while(1) {
+		ret = read(fd, rxb, 5);
+		if (ret != 5) {
+			printf("out of sync\n");
+		}
+		if ((rxb[0] & 0xfe) != 0x80) {
+			printf("out of sync, start %2X\n", rxb[0]);
+			return 1;
+		}
+		x = rxb[2];
+		x |= rxb[1] << 7;
+		y = rxb[4];
+		y |= rxb[3] << 7;
+		printf("X %4d, Y %4d, %s\n", x, y, rxb[0] & 1 ? "down" : "up");
+	}
+	return 0;
+}	USETW(req.ucr_request.wLength, 3);
+	req.ucr_data = txb;
+	ret = ioctl(wrfd, USB_DO_REQUEST, &req);
+	if (ret != 0) {
+		printf("Oops ioctl returned %d\n", ret);
+		return 1;
+	}
+
+	ret = read(fd, rxb, 2);
+	if (ret != 2) {
+		printf("Oops(3) only read %d bytes\n", ret);
+		return 1;
+	}
+	ret = read(fd, &rxb[2], rxb[1]);
+	if (ret < 2) {
+		printf("Oops(3) only read %d bytes\n", ret);
+		return 1;
+	}
+	rxb[2 + rxb[1]] = '\0';
+	printf("Type  %2X %2X %c %s\n", rxb[0], rxb[1], rxb[2], &rxb[3]);
+
+
+	while(1) {
+		ret = read(fd, rxb, 5);
+		if (ret != 5) {
+			printf("out of sync\n");
+		}
+		if ((rxb[0] & 0xfe) != 0x80) {
+			printf("out of sync, start %2X\n", rxb[0]);
+			return 1;
+		}
+		x = rxb[2];
+		x |= rxb[1] << 7;
+		y = rxb[4];
+		y |= rxb[3] << 7;
+		printf("X %4d, Y %4d, %s\n", x, y, rxb[0] & 1 ? "down" : "up");
+	}
+	return 0;
+}
+

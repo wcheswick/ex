@@ -1,0 +1,40 @@
+home:~$ mail kcd@chmfun.org
+Subject: Digital darkroom exhibit
+
+Greetings!
+
+It has been many years since I last worked on the Digital Darkroom
+interactive video display many years ago.  
+
+You ran it for quite a while, occasionally making plaintive requests
+for support of new hardware, etc.  Alas, I was busy elsewhere.
+
+But now I am freshening up all my exhibits, including yours.  I suspect
+the old one is long gone, but if you want updated software, I can
+give it to you easily.
+
+The new version has the following changes from the ancient one you ran:
+- it now does the artistic transforms on live images.  Imaging having
+        a live oil painting
+- it now assumes that the display is the modern 16x9 screen, which I drive
+        at 1680x1050
+- the software should be able to run on almost any PC-style hardware.  Really
+        old systems might be very slow.  I am using a first-generation 
+        Mac mini, and it works great
+- the software is available on a live-CD, i.e. you insert the CD, boot, and
+        some while later the exhibit is running.  The local hard drive is
+        not used, and you can try it out on various machines, like the office
+        PCs, without interfering with the machine.
+- it uses any modern web cam.  I am using the Logitech 910, an HD webcam
+        available from Amazon for well under $100.
+- it is designed for a touch screen, and I finally have one to play with (after
+        20 years!) You can use the mouse, or touch screen.
+
+As always, this is available without charge, and I invite suggestions to
+improve the exhibit software.
+
+If you are (still) interested, I'd love to hear from you.
+
+Bill Cheswick
+AT&T Shannon Lab
+ches@cheswick.com

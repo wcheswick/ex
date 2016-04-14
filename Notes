@@ -1,0 +1,28 @@
+seurat	1.- as for wtm, in 10th ed. Unix Manual Vol 2 - p.344
+slicer	2.- as for ejs in my book
+cone	3.- as for judy
+	4.- as for pjw - melting
+fish	5.- as for peter langston (p.61) (fisheye)
+	6.- as for ken - (called: Edward Munch)
+Hal Burch
+Tom Duff
+Gerard Holzman
+Elisabeth Patterson
+Frank Wojcik
+
+
+Make button labels programable, for international use.
+
+----
+
+http://www.airwindows.com/analysis/Albums/HowToRead/index.html
+
+  Technical note: the sonograms are made in Amadeus, at 22050hz, using a FFT size of 16384, 256 pixels high, with a Welch 'window'. Logarithmic frequencies of 2.0 points per half-tone, logarithmic amplitudes at 80 db with a high-frequency emphasis of 1.3/Khz. The palette is one I made, called 'Heat', which goes from black to red over the first half of it, then to orange, yellow, white, and finally blue-white.
+
+
+-----
+
+livecd reviews:
+
+http://distrowatch.com/weekly.php?issue=20060619#firstlook
+

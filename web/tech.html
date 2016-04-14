@@ -1,0 +1,233 @@
+<html lang="en-US">
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN"
+        "http://www.w3.org/TR/REC-html40/strict.dtd">
+<head>
+<title>Science Museum Exhibits</title>
+</head>
+<body bgcolor="#FFFFFF" link="#CC0000" alink="#FF3300" vlink="#000055">
+
+
+<h1>Technical Notes</h1>
+
+The new software runs of FreeBSD-stable (currently 6.2).  Currently
+it is loaded onto the hard drive and run from there, or it may be run
+from a bootable CD-ROM, which is should be configured to run the softare
+on most PCs, even if they normally run Windows.
+<p>
+
+Each exhibit has an optional configuration file which lets you change
+the defaults for things like hue, saturation, brightness, microphone and
+speaker volume.  Also, nearly all the text may be changed to any UTF8
+Unicode string, which should make it easy to use other languages.  I leave
+it to others to see if right-to-left text like Hebrew or Arabic will work.
+<p>
+
+The source code is available for all this software.  It is available for any
+use as long as the author is given credit.  Software improvements, exhibit suggestions,
+and new exhibits are welcome.  If there is enough interest, I will set up
+CVS access or put the whole thing on sourceforge.
+<p>
+
+The software comes from many sources.  All software is believed to be open source
+and freely-usable, or at least under GPL.  If you believe that copyright violations
+exist, please let me know.
+<p>
+
+<h2>Hardware</h2>
+
+In general, the software should run on any PC that FreeBSD runs on.  I make
+no promises here.  I have been focusing on bare-bones PCs that fit in my
+luggage as a luggable solution.  Laptops work fine, except I know
+of no supported, high-speed video source for laptops.
+<p>
+
+<blockquote>
+From Logisys Corp. (<a href="http://www.logisys.com">http://www.logisys.com</a>)
+I have used the NetPC SLIM PC, with video/audio/LAN/ATA100/IEEE1394,
+including a 20GB drive (the smallest available, and used only for development
+and debugging) and Mitsumi 54x CD-ROM.  The Intel Pentium 4 at 2.4GHz is
+plenty fast enough for all the video transforms, and the 256MB of RAM is
+way more than we need.  The cost, including shipping to New Jersey, was
+just under $600.  I installed the Hauppauge WIN/TV card in one of the
+two PCI slots.  It cost about $50 additional.
+</blockquote>
+<p>
+
+The Ethernet port is currently only used for development.  We could do a lot
+of cool things with a network connection. Perhaps a shutdown service for
+the museum closing time.
+<p>
+
+<h3>Displays</h3>
+
+Unlike the previous exhibits, we only use the computer's VGA screen for output.
+The original exhibits had separate video and screen outputs.  Normally, we
+drive a VESA VGA screen for the exhibit, but an X version is available that
+is useful for debugging.  It is a bit slower for some of the functions.
+
+<h3>Video Input</h3>
+<menu>
+<li><bf>Dlink USB camera</bf>, for which FreeBSD has some sample driver
+	code.  It is not ideal:  we don't know how to get compressed data
+	from it, and FreeBSD 4.9's USB kernel support seems to drop USB
+	packets often enough that we have to restart transfers a lot when
+	640x480 mode is used.  (Increasing the kernel USB buffer size
+	abates the problem somewhat.)  The camera only supports about 3.5
+	frames/second with this driver, but it is a very handy portable
+	camera for demos and debugging.
+<li><bf>Hauppauge WinCast/TV boards</bf>, and probably any related boards
+	that use the BT-family of chips.  We can get frames easily at
+	30/sec with
+	this card, and it and its successors (which should also work) are
+	cheap and available from places like CompUSA.  I sure wish there
+	were a PCcard version with an RCA input jack.
+	<p>
+
+	The supported video capture boards must have one of the Brooktree chips, including
+	848 and a couple others.  The most common board I have found with this chip
+	is the WinTV GO, by Hauppauge.  As of mid-April 2004 it cost $49.95 at
+	my local CompUSA.  This is an IDE board (i.e. no laptops supported) that
+	can easily capture 30 frames of 640x480 video per second.  A video camera
+	(not a web cam) is required.
+	I have no idea if the more expensive boards will work.
+	<p>
+
+	Webcams are not supported, which is too bad.  The makers have not released
+	programming information for the compressed data transfers from web cams, so
+	they only work under Windows, and I am not currently developing this software for
+	windows.
+
+<li><bf>Test input,</bf> which involves no video capture at all, but displays
+	a fixed image which is perhaps moved slowly during the test.  This
+	is useful when a camera isn't available.
+</menu>
+
+At present, we obtain 320x240x32 images.  We used to get smaller pixels,
+but it complicated processing at only modest performance improvements, which
+today's CPUs no longer need.
+
+<h3>Sound</h3>
+
+We use the standard microphone input and speaker or line out output for sound.
+The embedded microphone in a laptop works, but picks up noises from the disk,
+the fan, etc. 
+
+<h2>Software</h2>
+
+I have attempted to write this software clearly and simply, using the simplest
+auxiliary software possible.  The need for Unicode characters complicated things.
+<p>
+
+The program is written entirely in ANSI C.  Hardware-specific code is isolated
+in particular libraries and files.
+<p>
+
+<h4>Software from the ports collection</h4>
+
+From the FreeBSD ports collection we need:
+
+<menu>
+<li><bf>/usr/ports/graphics/netpbm</bf> - contains various image I/O routines
+	needed for reading and writing video files, and packing webcam input
+	information.
+<li><bf>/usr/ports/graphics/libglut</bf> - OpenGL library stuff for the X-based
+	debugging stuff.
+<li><bf>/usr/ports/math/fftw</bf> - Fastest Fast Fourier in the West.  What we
+	use to generate the audiograms.
+<li><bf>/usr/ports/audio/libaudiofile</bf> - Used to read in the .wav audio sample
+	files.
+<li><bf>/usr/ports/x11-fonts/pcf2bdf</bf> - Used to convert the fonts we need,
+</menu>
+
+The X version requires the GLX and DRI extensions.
+
+
+<h4>Kernel Mods</h4>
+
+I hated to do this:  I'd like to run standard software where ever reasonable,
+but I couldn't.
+<p>
+
+I didn't want museums to have to configure the X window system, so I
+use raw VESA VGA access.  This has necessitated a couple of small, simple, slightly
+vexing kernel patches to FreeBSD.  One patch allows the kernel to report VESA
+modes that are reported disabled by the VGA BIOS, something ATI boards do.  Apparently
+they only claim to support VESA modes when Windows drivers are installed.  It
+turns out that the hardware supports them well enough for our uses anyway.
+<p>
+
+We use 32-bit pixels in the VGA memory, which is not available in FreeBSD's
+rudimentary VESA support. (They go up to 24-bit pixels, which some graphics
+cards don't support.  And 24-bit pixels ran slower than 32-bit pixels in my
+tests.)  Therefore, the second mod lets a user program running as root to select
+any VGA mode he wants that is in the BIOS table.  This would actually be a reasonable
+permanent change to the kernel.
+<p>
+
+The kernel must be built to support the BT484 card.  To the kernel
+configuration file add:
+<pre>
+        # Brooktree driver has been ported to the new I2C framework. Thus,
+        # you'll need to have the following 3 lines in the kernel config.
+        
+        device smbus
+        device iicbus
+        device iicbb
+        
+        # The iic and smb devices are only needed if you want to control other
+        # I2C slaves connected to the external connector of some cards.
+        #
+        
+        device                bktr
+</pre>
+and you will need:
+<pre>
+        cd /dev
+        sh MAKEDEV bktr0
+</pre>
+The program will need read/write access to /dev/bktr (for /Brooktree
+input) or /dev/ugen* for the dlink camera.
+<p>
+
+Finally, both bare-bones MiniITX PCs failed to boot an unmodified FreeBSD.
+Something in the disk DMA stuff is incompatible, causing timeouts.  If
+ATA DMA is turned off, it works fine, and still darned fast.  The boot
+entry is:
+<pre>
+	set hw.ata.ata_dma=0
+</pre>
+I added a patch to the kernel to make that the default, and the machine works
+fine.  In fact, it builds new systems and kernels with blazing speed, so I guess
+the DMA isn't that vital.
+
+
+<h2>Security</h2>
+
+Though careful coding practices have been used in most areas, I do not expect
+the general public to have access to the keyboard, or to a network port, in an
+actual science museum exhibit.  Coding
+efforts have focused on making the publicly-accessible portions of the interfaces
+bulletproof and reliable.
+<p>
+
+At present, the exhibits need to run as user <it>root</it> to access the
+VGA displays.  This ought to be changed, but shouldn't be a big deal on
+these single-user, isolated hosts, or when run from a CD-ROM.
+<p>
+
+The X version can be run without root as long as the various input devices
+are accessible to the program.
+
+
+<h2>Booting/distribution</h2>
+
+I am attempting to create Freesbie boot disks that will simply boot the software
+from a CD-ROM without touching a harddrive or its contents.  This means it can
+be run on PC lab computers without changing the operating system on the disk.
+It also means that an exhibit's longevity or reliability is not limited to the
+life of a hard drive.  This worked well with the original LSC science exhibit,
+which fit entirely on a floppy disk.  Many things died over the 14 years it
+ran, but neither the software nor the disks were a problem
+
+</body>
+</html>

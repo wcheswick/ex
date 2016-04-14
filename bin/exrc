@@ -1,0 +1,9 @@
+#!/bin/sh
+#
+prog=exrc
+usage=$prog
+#
+#	Start up the exhibit software
+
+echo "starting X from `tty`" 1>&2
+startx

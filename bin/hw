@@ -1,0 +1,122 @@
+#!/usr/local/bin/bash
+#
+prog=hw
+usage=$prog
+#
+#	Check the hardware, and create a file for the shell reporting what
+#	we have.
+#
+#	First, check the display.  If we have access to a virtual console,
+#	make sure the kernel mods are in, and useful display modes are available
+#	from the adaptor.
+
+TMPDIR=${TMPDIR:-/tmp}
+trap "rm -rf $TMPDIR/vgamodes" EXIT
+
+umask 0666
+
+echo -n "$prog: VGA               "
+if vidcontrol -i mode >$TMPDIR/vgamodes 2>/dev/null
+then
+	for i in 640x480 800x600 1024x768 1280x1024
+	do
+		if grep ${i}x32 <$TMPDIR/vgamodes >/dev/null
+		then
+			HW_VGA="$i $HW_VGA"
+		fi
+	done
+	if [ -n "$HW_VGA" ]
+	then
+		echo "$HW_VGA"
+	else
+		echo "VESA 32-bit modes missing"
+	fi
+else
+	echo "missing"
+fi
+
+echo -n "$prog: X11               "
+if [ -n "$DISPLAY" ]
+then
+	echo "OK"
+	HW_X=true
+else
+	echo "missing"
+fi
+
+
+# Is a brooktree device available for video capture?  It is a bit
+# of a kludge to check the dmesg report.
+
+echo -n "$prog: Brooktree video   "
+if [ -n "`dmesg | grep -i brooktree`" ]
+then
+	echo "OK"
+	HW_BROOKTREE=true
+else
+	echo "missing"
+fi
+
+
+echo -n "$prog: Dlink USB camera  "
+if [ -n "`dmesg | grep -i ov511`" ]
+then
+	echo "OK"
+	HW_DLINK=true
+else
+	echo "missing"
+fi
+
+# Sound
+
+echo -n "$prog: sound             "
+HW_SOUND=""
+if [ -n "`dmesg | grep -i pcm0`" ]
+then
+	case `file -L /dev/dsp 2>/dev/null` in
+	*special*)
+		echo "OK"
+		HW_SOUND=true;;
+	*)	echo "/dev/dsp missing";;
+	esac
+else
+	echo "missing"
+fi
+
+echo
+
+echo -n "$prog:   display:    "
+HW_DISPLAY=""
+if [ -n "$HW_VGA" ]
+then
+	echo "VESA VGA"
+	HW_DISPLAY=v
+elif [ -n "$HW_X" ]
+then
+	echo "X11 display"
+	HW_DISPLAY=x
+else
+	echo "** none available **"
+fi
+
+echo -n "$prog:   video:      "
+HW_VIDEO=""
+if [ -n "$HW_BROOKTREE" ]
+then
+	echo "Brooktree/Hauppaugh frame capture"
+	HW_VIDEO=h
+elif [ -n "$HW_DLINK" ]
+then
+	echo "DLink USB camera"
+	HW_VIDEO=u
+else
+	echo "test file"
+	HW_VIDEO=t
+fi
+
+
+set	|
+grep '^HW_' >$TMPDIR/hw.sh
+
+echo
+echo

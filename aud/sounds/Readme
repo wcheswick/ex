@@ -1,0 +1,9 @@
+The sound files we use at the moment are 22050 samples/sec monaural files.
+These are created from typical 44100 wav files with:
+
+sox $i -r 22050 -c 1 ../$i
+
+I captured these sounds myself, and hereby release them into the public
+domain.  So there.
+
+Bill Cheswick

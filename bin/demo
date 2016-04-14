@@ -1,0 +1,52 @@
+#!/bin/sh
+#
+prog=demo
+usage=$prog
+#
+#	Demo the various exhibits.  This figures out the current
+#	hardware environment, a bit, and tries to call the right version
+#	of each.
+
+PATH=$PATH:/usr/local/bin;	export PATH
+
+. /usr/local/bin/hw
+
+case "$DISPLAY" in
+"")	out=v;;		# vga screen
+*)	out=x;;		# x display
+esac
+
+if [ -n "`dmesg | grep -i brooktree`" ]
+then
+	in=h		# BT848 high speed input
+elif [ -n "`dmesg | grep OV5`" ]
+then
+	in=u		# USB camera input
+else
+	in=t		# test file
+fi
+
+while true
+do
+	echo "Exhibit prototypes"
+	echo
+	echo "chat	Chattanooga portrait style station"
+	echo "lsc	Liberty Science Center digital darkroom"
+	echo "aud	What does sound look like?"
+	echo "lot	How long does it take to win the lottery?"
+	echo 
+	echo -n "select exhibit: "
+	read ex
+	case $ex in
+	chat)	${in}${out}chat;;
+	lsc)	${in}${out}lsc;;
+	aud)	${out}aud;;
+	lot)	${out}lot;;
+	orb)	${out}orb;;
+	""|x)	echo
+		exit;;
+	*)
+		echo "unknown exhibit:  '$ex'"
+	esac
+done
+echo

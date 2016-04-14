@@ -1,0 +1,119 @@
+#!/bin/sh
+#
+prog=mkport
+usage="$prog [-c]"
+#
+
+portname=ex
+ver=0.9
+
+EX=~ches/proj/ex
+TARGET=/usr/local/lib
+PORT=/usr/ports/science/ex
+DIST=/usr/ports/distfiles/$portname-$ver.tar.gz
+
+TMP=/var/tmp/$prog
+rm -rf $TMP
+mkdir -p $TMP
+trap "rm -rf $TMP" EXIT
+
+case "$1" in
+-c)	sudo rm -f $DIST
+	sudo rm -rf $PORT
+	shift
+esac
+
+case $# in
+0)	;;
+*)	echo "$usage" 1>&2
+	exit 1
+esac
+
+if [ ! -s $DIST ]
+then
+	echo "$prog: making source release" 1>&2
+
+	make clean
+
+	mkdir $TMP/$portname-$ver
+	cp -R . $TMP/$portname-$ver
+	sudo sh -c "cd $TMP; \
+		tar cf - $portname-$ver | gzip >$DIST"
+fi
+
+if [ ! -d $TARGET/$portname ]
+then
+	echo "$prog: making installed software" 1>&2
+
+	make
+fi
+
+cat <<!EOF >$TMP/pkg-descr
+Several open source hands-on science museum exhibits.  These are designed
+roughly ten-year olds, but I hope are fun for all ages.  Many of the exhibits
+require extra hardware, such as a video source and a cheap Hauppauge video
+card, or perhaps a microphone and working audio. This software runs in VESA
+display mode, which requires a small kernel mod to FreeBSD (included).
+
+Live CD versions can be created, so they
+can be run on machines without touching the hard drives.
+
+More about this project is available at http://www.cheswick.com/ches/ex/
+!EOF
+
+cat <<!EOF >$TMP/pkg-plist
+@name	$pkg
+`cd $EX; find bin -type f -print`
+`cd $TARGET; find $portname -type f -print | egrep -v '(CVS|/\.)'`
+`cd $TARGET; find $portname -depth -type d -print |
+	while read dir
+	do
+		echo "@dirrm $dir"
+	done`
+@pkgdep netpbm
+@pkgdep libglut
+@pkgdep fftw
+@pkgdep libaudiofile
+@pkgdep pcf2bdf
+@pkgdep sox
+@pkgdep rsync
+@pkgdep ImageMagick
+!EOF
+
+cat <<!EOF >$TMP/Makefile
+# New ports collection makefile for:  $portname
+# Date created:        24 Oct 2007
+# Whom:                ches
+#
+# $FreeBSD$
+#
+
+PORTNAME=      $portname
+PORTVERSION=   $ver
+CATEGORIES=    science
+MASTER_SITES=  http://www.cheswick.com/ches/$portname
+
+MAINTAINER=    ches@research.att.com
+COMMENT=	Science museum hands-on exhibits
+
+.include <bsd.port.mk>
+!EOF
+
+echo "$prog: populating port directory" 1>&2
+
+if [ ! -d $PORT ]
+then
+	echo "$prog: making port directory" 1>&2
+
+	sudo mkdir -p $PORT
+fi
+
+cd $TMP
+sudo cp pkg-descr pkg-plist Makefile $PORT
+
+cd $PORT
+echo "$prog: Making checksums" 1>&2
+sudo make makesum
+
+echo "$prog: Making port" 1>&2
+sudo make

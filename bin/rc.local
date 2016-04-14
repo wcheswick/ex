@@ -1,0 +1,3 @@
+kldload bktr
+kldload vesa
+/home/nex/bin/setupwebcam

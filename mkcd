@@ -1,0 +1,9 @@
+# remastersys has to be installed, see
+#	
+#	http://www.geekconnection.org/remastersys/ubuntu.html
+
+sudo rm -rf /home/remastersys/remastersys
+
+sudo ./MYremastersys backup cdfs &&
+	sudo ./MYremastersys backup iso lsc.iso &&
+	sudo wodim -v -data /home/remastersys/remastersys/lsc.iso

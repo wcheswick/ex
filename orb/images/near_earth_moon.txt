@@ -1,0 +1,26 @@
+Earth & Moon                                                26 Jan 98
+
+This mosaic shows images of Earth and the moon acquired by the 
+multispectral imager on the Near Earth Asteroid Rendezvous Spacecraft 
+(NEAR) on January 23, 1998, 19 hours after the spacecraft swung by Earth 
+on its way to the asteroid 433 Eros. The images of both were taken from 
+a range of 250,000 miles (400,000 kilometers), approximately the same as 
+the distance between the two bodies. This unique perspective, never seen 
+before, shows both our planet and its moon at the relative size that 
+each appears when viewed from the other. Also, both Earth and the Moon 
+are viewed from above their south poles, a perspective not attainable 
+from either body because the moon orbits high above Earth's equator. In 
+the Earth image, the south pole is at the center and the continent of 
+Antartica is surrounded by sea ice and storm fronts. 
+The image mosaic is constructed from blue, green, and infrared filters. 
+These colors highlight differences between rock types, water, and 
+vegetation. On Earth, the red area at the upper right side is desert and 
+vegetation in Australia. Snow, ice, and clouds appear as subtly 
+different shades of white and light blue. The moon's blandness, compared 
+to Earth, arises from its lack of an atmosphere, oceans, and vegetation. 
+For viewing purposes, the moon is shown five times brighter than in 
+reality, and ten times closer to Earth than it actually is.
+
+Built and managed by The Johns Hopkins University Applied Physics 
+Laboratory, Laurel, Maryland, NEAR was the first spacecraft launched in 
+NASA's Discovery Program of low-cost, small-scale planetary missions. 

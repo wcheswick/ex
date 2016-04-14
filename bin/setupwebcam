@@ -1,0 +1,44 @@
+#!/bin/sh
+#
+prog=setupwebcam
+usage="$prog"
+#
+#	find an active network interface.  if it isn't on 192.168.0/24,
+#	add an alias and set if we get the address.
+#
+#	only works for IPv4 webcams
+
+WEBCAM_ADDR=192.168.0.20
+MY_ADDR=192.168.0.249
+
+# do we need to set up a network alias?
+
+interface=`	ifconfig |
+		grep '^[^ 	]'	|
+		grep RUNNING		|
+		grep -v lo0:		|
+		sed 's/:.*$//' | sed 1q`
+
+case "$interface" in
+"")	echo "$prog: no active interface found" 1>&2
+	exit 1
+esac
+
+goodaddr=`ifconfig $interface |
+	grep '^[ 	]*inet' |
+	awk '{print $2}' |
+	grep '^192\.168\.0\.'`
+
+case "$goodaddr" in
+"")	echo "$prog: Adding network alias for default webcam address on interface '$interface'" 1>&2
+	ifconfig $interface alias $MY_ADDR/24;;
+
+*)
+	echo "$prog: webcam network already accessible on interface '$interface'" 1>&2
+esac
+
+if ! ping -c 2 -o  -n -Q -q $WEBCAM_ADDR >/dev/null 2>/dev/null 
+then
+	echo "$prog: webcam not present or responding at $WEBCAM_ADDR" 1>&2
+	exit 2
+fi

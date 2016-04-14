@@ -1,0 +1,43 @@
+Things to probably turn off in the DVD system:
+
+  325 ?        S<     0:00 [ext4-dio-unwrit]
+  379 ?        S      0:00 upstart-udev-bridge --daemon
+  384 ?        S<s    0:00 udevd --daemon
+  536 ?        S<     0:00 udevd --daemon
+  537 ?        S<     0:00 udevd --daemon
+  573 ?        S<     0:00 [cfg80211]
+  670 ?        Ss     0:00 /usr/sbin/sshd -D
+  677 ?        Sl     0:00 rsyslogd -c4
+  683 ?        S      0:00 upstart-socket-bridge --daemon
+  690 ?        Ss     0:00 dbus-daemon --system --fork --activation=upstart
+  704 ?        S      0:00 avahi-daemon: running [dark2.local]
+  706 ?        S      0:00 avahi-daemon: chroot helper
+  707 ?        Ssl    0:00 NetworkManager
+>>731 ?        S      0:00 /usr/sbin/modem-manager
+>>733 ?        Sl     0:00 /usr/lib/policykit-1/polkitd
+>>786 ?        S      0:00 /sbin/wpa_supplicant -u -s
+  806 tty4     Ss+    0:00 /sbin/getty -8 38400 tty4
+  813 tty5     Ss+    0:00 /sbin/getty -8 38400 tty5
+  825 tty2     Ss+    0:00 /sbin/getty -8 38400 tty2
+  826 tty3     Ss+    0:00 /sbin/getty -8 38400 tty3
+  829 tty6     Ss+    0:00 /sbin/getty -8 38400 tty6
+  838 ?        Ss     0:00 acpid -c /etc/acpi/events -s /var/run/acpid.socket
+  842 ?        Ss     0:00 /usr/sbin/irqbalance
+  847 ?        Ss     0:00 cron
+>>848 ?        Ss     0:00 atd
+  897 ?        S<     0:00 [hd-audio0]
+>1004 ?        Ss     0:00 /usr/sbin/cupsd -F
+ 1007 ?        S      0:00 [flush-8:0]
+ 1013 ?        S<     0:00 [hci0]
+>1015 ?        Ss     0:00 /usr/sbin/bluetoothd --udev
+ 1018 ?        S<     0:00 [l2cap]
+ 1073 tty1     Ss     0:00 /bin/login -f     
+ 1139 ?        Sl     0:00 /usr/sbin/console-kit-daemon --no-daemon
+ 1211 tty1     S+     0:00 -bash
+ 1291 ?        S      0:00 /sbin/dhclient -d -4 -sf /usr/lib/NetworkManager/nm-dhcp-client.action -pf /var
+ 1363 ?        Ss     0:00 sshd: ches [priv]   
+ 1432 ?        S      0:00 sshd: ches@pts/0    
+ 1433 pts/0    Ss     0:00 -bash
+ 1489 pts/0    S      0:00 ssh -x -a -oClearAllForwardings=yes -2 home -s sftp
+ 1492 ?        Ssl    0:00 sshfs -o reconnect,idmap=none,follow_symlinks,allow_root home:proj/nex proj/nex
+ 1498 pts/0    R+     0:00 ps ax

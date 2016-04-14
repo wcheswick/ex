@@ -1,0 +1,45 @@
+#!/bin/sh
+#
+prog=demo
+usage="$prog lsc|chat|aud|lot|cb"
+#
+#	Run the given exhibit.  We compute the correct executable file
+#	name based on the available hardware.
+
+PATH=/usr/local/bin:$PATH;	export PATH
+FONT=/usr/local/lib/ex/fonts;	export FONT
+
+case $# in
+1)	ex=$1;;
+0)	ex=lsc;;
+*)	echo "$usage" 1>&2
+	exit 1
+esac
+
+. hw
+
+case "$DISPLAY" in
+"")	out=v;;		# vga screen
+*)	out=x;;		# x display
+esac
+
+if [ -n "`dmesg | grep -i brooktree`" ]
+then
+	in=h		# BT848 high speed input
+elif [ -n "`dmesg | grep OV5`" ]
+then
+	in=u		# USB camera input
+else
+	in=t		# test file
+fi
+
+case $ex in
+chat)	${in}${out}chat;;
+lsc)	${in}${out}lsc;;
+aud)	${out}aud;;
+lot)	${out}lot;;
+orb)	${out}orb;;
+cb)	${in}${out}cb;;
+*)
+	echo "$prog: unknown exhibit:  '$ex'"
+esac

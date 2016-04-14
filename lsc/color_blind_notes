@@ -1,0 +1,65 @@
+From aware-colorlab@hwg.org  Thu Aug 19 22:18:10 2004
+From: Matthew Wickline <aware-colorlab@hwg.org>
+To: Bill Cheswick <ches@lumeta.com>
+Subject: Re: permission to obtain and use color filter software
+Date: Thu, 19 Aug 2004 19:17:52 -0700
+   
+   
+> Where do I find this particular piece of javascript?
+   
+  
+From the license
+    http://colorlab.wickline.org/docs/legal.html#license
+  
+to the documentation table of contents (link at top of page)
+    http://colorlab.wickline.org/docs/
+  
+scroll to the very bottom and find the link for "source"
+    http://colorlab.wickline.org/colorlab.tar.gz
+  
+which lets you run the colorlab locally. In there you'll find the 
+engine.js file which is also the same as you'd find at
+  
+    http://colorlab.wickline.org/engine.js
+  
+In skimming this source I see that among issues I'd remembered,
+there is the sad fact that the comments are in places a bit out of
+sync with the state of the script. In particular there's some
+comments toward the end about how I'll maybe one day calculate
+colorblind simulations of colors rather than looking them up in a
+table. The code currently does that calculation. It used to just
+have a lookup table for the "web safe" colors.
+  
+For some reason when I saw your initial email, I thought you were
+talking about the colorlab
+    http://colorlab.wickline.org/
+rather than the colorfilter
+    http://colorfilter.wickline.org/
+This is probably because the colorfilter doesn't talk about source
+code availability while the colorlab does.
+
+For the applications you have in mind, I think that the colorlab
+javascript source code will be a good enough starting point. The
+colorfilter does the same transformations, but with perl code and
+has way more ancillary code for the processing of HTML/CSS/images
+that would just get in your way.
+
+The code you want is located below
+
+    function update_colorpicker_image()
+
+and above
+
+    function lookup_data( r,g,b )
+
+and in particular, the meat of the matter is in
+
+    function color_blind_sims( r,g,b )
+
+The rest of code between the indicated landmarks is just the data
+and support for translating between color spaces and some
+colorblindness-describing metrics in the Yuv color space.
+
+Enjoy :)
+
+-matt

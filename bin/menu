@@ -1,0 +1,48 @@
+#!/bin/sh
+#
+prog=demo
+usage=$prog
+#
+#	Run the given exhibit.  We compute the correct executable file
+#	name based on the available hardware.
+
+if [ -d ~ches/proj/ex ]
+then
+	cd ~ches/proj/ex
+else
+	cd /usr/local/ex
+fi
+
+. hw
+
+if [ -n "HW_DISPLAY" ]
+then
+	type=$HW_DISPLAY
+else
+	echo "$prog: no display available, aborting" 1>&2
+	exit 1
+fi
+
+# programs with no special hardware requirements
+
+list="lot"
+
+# programs that need sound
+
+if [ -n "$HW_SOUND" ]
+then
+	list="$list aud"
+fi
+
+# programs that need video capture
+
+if [ -n "$HW_DISPLAY" ]
+then
+	list="$list cb lsc chat"
+fi
+
+while true
+do
+	echo exec ${HW_DISPLAY}menu $list
+exit
+done

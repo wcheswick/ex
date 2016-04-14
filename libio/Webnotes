@@ -1,0 +1,22 @@
+First supported webcam is the TRENDnet TV-IP100.
+
+It has a default IP address of 192.168.0.20.  Changes from
+factory settings:
+
+factory settings we like:
+
+IP: 192.168.0.20
+video resolution: 320x240
+compression rate: medium
+
+brightness, constrast, and saturation are all controllable.
+60Hz
+
+changes:
+
+horizontal mirror: makes it like looking in a mirror
+
+http://192.168.0.20/MJPEG.CGI
+feed motion jpeg data at about 300KB/sec
+
+http://www.sfpeter.com/2007/08/20/19/

@@ -1,0 +1,615 @@
+/*-
+ * Copyright (c) 1991-1997 Sren Schmidt
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer
+ *    in this position and unchanged.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software withough specific prior written permission
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * $FreeBSD: src/lib/libvgl/main.c,v 1.6.2.2 2001/07/30 14:31:30 yokota Exp $
+ */
+
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/signal.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
+#include <sys/mman.h>
+
+#include <sys/param.h>
+#if __FreeBSD_version < 500000
+#include <machine/console.h>
+#else
+#include <sys/consio.h>
+#include <sys/fbio.h>
+// #include <machine/console.h>
+#include <machine/pcvt_ioctl.h>
+#endif
+
+#include <errno.h>
+
+#include "vgl.h"
+
+#define min(x, y)	(((x) < (y)) ? (x) : (y))
+#define max(x, y)	(((x) > (y)) ? (x) : (y))
+
+VGLBitmap *VGLDisplay;
+video_info_t VGLModeInfo;
+video_adapter_info_t VGLAdpInfo;
+byte *VGLBuf;
+FILE *logfd = NULL;
+
+static int VGLMode;
+static int VGLOldMode;
+static size_t VGLBufSize;
+static byte *VGLMem = MAP_FAILED;
+static int VGLSwitchPending;
+static int VGLAbortPending;
+static int VGLOnDisplay;
+static unsigned int VGLCurWindow;
+static int VGLInitDone = 0;
+static struct winsize VGLOldWSize;
+
+void
+VGLEnd()
+{
+struct vt_mode smode;
+
+  if (!VGLInitDone)
+    return;
+  VGLInitDone = 0;
+  VGLSwitchPending = 0;
+  VGLAbortPending = 0;
+
+  signal(SIGUSR1, SIG_IGN);
+
+  if (VGLMem != MAP_FAILED) {
+    VGLClear(VGLDisplay, 0);
+    munmap(VGLMem, VGLAdpInfo.va_window_size);
+  }
+
+  if (VGLOldMode >= M_VESA_BASE) {
+    /* ugly, but necessary */
+    ioctl(0, _IO('V', VGLOldMode - M_VESA_BASE), 0);
+    if (VGLOldMode == M_VESA_800x600) {
+      int size[3];
+      size[0] = VGLOldWSize.ws_col;
+      size[1] = VGLOldWSize.ws_row;
+      size[2] = 16;
+      ioctl(0, KDRASTER, size);
+    }
+  } else {
+    ioctl(0, _IO('S', VGLOldMode), 0);
+  }
+  ioctl(0, KDDISABIO, 0);
+  ioctl(0, KDSETMODE, KD_TEXT);
+  smode.mode = VT_AUTO;
+  ioctl(0, VT_SETMODE, &smode);
+  if (VGLBuf)
+    free(VGLBuf);
+  VGLBuf = NULL;
+  free(VGLDisplay);
+  VGLDisplay = NULL;
+  VGLKeyboardEnd();
+}
+
+static void 
+VGLAbort()
+{
+VGLEnd();		// debugging
+  VGLAbortPending = 1;
+  signal(SIGINT, SIG_IGN);
+  signal(SIGTERM, SIG_IGN);
+  signal(SIGSEGV, SIG_IGN);
+  signal(SIGBUS, SIG_IGN);
+  signal(SIGUSR2, SIG_IGN);
+}
+
+static void
+VGLSwitch()
+{
+  if (!VGLOnDisplay)
+    VGLOnDisplay = 1;
+  else
+    VGLOnDisplay = 0;
+  VGLSwitchPending = 1;
+  signal(SIGUSR1, VGLSwitch);
+}
+
+int
+VGLInit(int mode)
+{
+  struct vt_mode smode;
+  int adptype;
+  char c, buf[100];
+
+  if (VGLInitDone)
+    return -1;
+
+  logfd = fopen("/tmp/log", "a");
+  if (logfd == NULL) {
+    perror("open log");
+    return -1;
+  }
+  setbuf(logfd, 0);
+fprintf(logfd, "\n*** starting up ***\n");
+  signal(SIGUSR1, VGLSwitch);
+if (!getenv("SIGDEBUG")) {
+  signal(SIGINT, VGLAbort);
+  signal(SIGTERM, VGLAbort);
+  signal(SIGSEGV, VGLAbort);
+  signal(SIGBUS, VGLAbort);
+}
+  signal(SIGUSR2, SIG_IGN);
+
+  VGLOnDisplay = 1;
+  VGLSwitchPending = 0;
+  VGLAbortPending = 0;
+
+  if (ioctl(0, CONS_GET, &VGLOldMode) || ioctl(0, CONS_CURRENT, &adptype))
+    return -1;
+  if (IOCGROUP(mode) == 'V')	/* XXX: this is ugly */
+    VGLModeInfo.vi_mode = (mode & 0x0ff) + M_VESA_BASE;
+  else
+    VGLModeInfo.vi_mode = mode & 0x0ff;
+  if (ioctl(0, CONS_MODEINFO, &VGLModeInfo))	/* FBIO_MODEINFO */
+    return -1;
+
+#ifdef LIBVGL_DEBUG
+	fprintf(logfd, "    mode#     flags   type    size       "
+	       "font      window      linear buffer\n");
+	fprintf(logfd, "%3d (0x%03x)", VGLModeInfo.vi_mode, VGLModeInfo.vi_mode);
+   		fprintf(logfd, " 0x%08x", VGLModeInfo.vi_flags);
+	if (VGLModeInfo.vi_flags & V_INFO_GRAPHICS) {
+		c = 'G';
+		snprintf(buf, sizeof(buf), "%dx%dx%d %d",
+			 VGLModeInfo.vi_width, VGLModeInfo.vi_height, 
+			 VGLModeInfo.vi_depth, VGLModeInfo.vi_planes);
+	} else {
+		c = 'T';
+		snprintf(buf, sizeof(buf), "%dx%d",
+			 VGLModeInfo.vi_width, VGLModeInfo.vi_height);
+	}
+	fprintf(logfd, " %c %-15s", c, buf);
+	snprintf(buf, sizeof(buf), "%dx%d", 
+		 VGLModeInfo.vi_cwidth, VGLModeInfo.vi_cheight); 
+	fprintf(logfd, " %-5s", buf);
+   		fprintf(logfd, " 0x%05x %2dk %2dk", 
+	       VGLModeInfo.vi_window, (int)VGLModeInfo.vi_window_size/1024, 
+	       (int)VGLModeInfo.vi_window_gran/1024);
+   	fprintf(logfd, " 0x%08x %dk\n",
+	       VGLModeInfo.vi_buffer, (int)VGLModeInfo.vi_buffer_size/1024);
+fprintf(logfd, " memory model = %d\n", VGLModeInfo.vi_mem_model);
+#endif
+
+  /* If current mode is VESA_800x600 then save its geometry to restore later */
+  if ((VGLOldMode >= M_VESA_BASE) && (VGLOldMode == M_VESA_800x600))
+    if (ioctl(0, TIOCGWINSZ, &VGLOldWSize))
+      return -1;
+
+  VGLDisplay = (VGLBitmap *)malloc(sizeof(VGLBitmap));
+  if (VGLDisplay == NULL)
+    return -2;
+
+  if (ioctl(0, KDENABIO, 0)) {
+    free(VGLDisplay);
+    return -3;
+  }
+
+  VGLInitDone = 1;
+  VGLDisplay->bpp = -1;
+
+  /*
+   * vi_mem_model specifies the memory model of the current video mode
+   * in -CURRENT.
+   */
+  switch (VGLModeInfo.vi_mem_model) {
+  case V_INFO_MM_PLANAR:
+    /* we can handle EGA/VGA planner modes only */
+    if (VGLModeInfo.vi_depth != 4 || VGLModeInfo.vi_planes != 4
+	|| (adptype != KD_EGA && adptype != KD_VGA)) {
+      VGLEnd();
+      return -40;
+    }
+    VGLDisplay->Type = VIDBUF4;
+    break;
+  case V_INFO_MM_PACKED:
+    /* we can do only 256 color packed modes */
+    if (VGLModeInfo.vi_depth != 8) {
+      VGLEnd();
+      return -41;
+    }
+    VGLDisplay->Type = VIDBUF8;
+    VGLDisplay->bpp = 1;
+    break;
+  case V_INFO_MM_VGAX:
+    VGLDisplay->Type = VIDBUF8X;
+    break;
+  case V_INFO_MM_DIRECT:
+      if (VGLBufSize/VGLModeInfo.vi_planes > VGLAdpInfo.va_window_size) {
+         VGLEnd();	// not contiguous display area: get a newer adaptor
+         return -41;
+      }
+      switch (VGLModeInfo.vi_depth) {
+      case 15:
+        VGLDisplay->Type = VIDBUF15;
+        VGLDisplay->bpp = 2;
+        break;
+      case 16:
+        VGLDisplay->Type = VIDBUF16;
+        VGLDisplay->bpp = 2;
+        break;
+      case 24:
+        VGLDisplay->Type = VIDBUF24;
+        VGLDisplay->bpp = 3;
+        break;
+      case 32:
+        VGLDisplay->Type = VIDBUF32;
+        VGLDisplay->bpp = 4;
+        break;
+      default:
+        VGLEnd();
+fprintf(stderr, "vi_depth = %d\n", VGLModeInfo.vi_depth);
+fprintf(logfd, "vi_depth = %d\n", VGLModeInfo.vi_depth);
+        return -4;
+    }
+    break;
+  default:
+    VGLEnd();
+    return -42;
+  }
+
+  ioctl(0, VT_WAITACTIVE, 0);
+  ioctl(0, KDSETMODE, KD_GRAPHICS);
+  if (ioctl(0, mode, 0)) {
+    VGLEnd();
+    return -5;
+  }
+  if (ioctl(0, CONS_ADPINFO, &VGLAdpInfo)) {	/* FBIO_ADPINFO */
+    VGLEnd();
+    return -6;
+  }
+
+  /*
+   * Calculate the shadow screen buffer size.  In -CURRENT, va_buffer_size
+   * always holds the entire frame buffer size, wheather it's in the linear
+   * mode or windowed mode.  
+   *     VGLBufSize = VGLAdpInfo.va_buffer_size;
+   * In -STABLE, va_buffer_size holds the frame buffer size, only if
+   * the linear frame buffer mode is supported. Otherwise the field is zero.
+   * We shall calculate the minimal size in this case:
+   *     VGLAdpInfo.va_line_width*VGLModeInfo.vi_height*VGLModeInfo.vi_planes
+   * or
+   *     VGLAdpInfo.va_window_size*VGLModeInfo.vi_planes;
+   * Use whichever is larger.
+   */
+
+  if (VGLAdpInfo.va_buffer_size != 0) {
+fprintf(logfd, "linear frame buffer mode is supported = 0x%.08x %dk\n",
+VGLAdpInfo.va_buffer_size, VGLAdpInfo.va_buffer_size/1024);
+    VGLBufSize = VGLAdpInfo.va_buffer_size;
+  } else
+    VGLBufSize = max(VGLAdpInfo.va_line_width*VGLModeInfo.vi_height,
+		     VGLAdpInfo.va_window_size)*VGLModeInfo.vi_planes;
+  VGLBuf = malloc(VGLBufSize);
+  if (VGLBuf == NULL) {
+    VGLEnd();
+    return -7;
+  }
+
+#ifdef LIBVGL_DEBUG
+  fprintf(logfd, "VGLBufSize:0x%x  planes=%d windowsize=%d display type=%d\n",
+VGLBufSize, VGLBufSize/VGLModeInfo.vi_planes, VGLAdpInfo.va_window_size, VGLDisplay->Type);
+#endif
+
+  /* see if we are in the windowed buffer mode or in the linear buffer mode */
+  if (VGLBufSize/VGLModeInfo.vi_planes > VGLAdpInfo.va_window_size) {
+    if (VGLDisplay->Type == VIDBUF4)
+      VGLDisplay->Type = VIDBUF4S;
+    else if (VGLDisplay->Type == VIDBUF8)
+      VGLDisplay->Type = VIDBUF8S;
+  }
+
+  VGLMode = mode;
+  VGLCurWindow = 0;
+
+  VGLDisplay->Xsize = VGLModeInfo.vi_width;
+  VGLDisplay->Ysize = VGLModeInfo.vi_height;
+  if (VGLModeInfo.vi_depth > 8) {
+    VGLDisplay->VXsize = VGLAdpInfo.va_line_width;
+    VGLDisplay->VYsize = VGLModeInfo.vi_height;
+  } else {
+    VGLDisplay->VXsize = VGLAdpInfo.va_line_width
+			   *8/(VGLModeInfo.vi_depth/VGLModeInfo.vi_planes);
+    VGLDisplay->VYsize = VGLBufSize/VGLModeInfo.vi_planes/VGLAdpInfo.va_line_width;
+  }
+
+  VGLDisplay->Xorigin = 0;
+  VGLDisplay->Yorigin = 0;
+
+  VGLMem = (byte*)mmap(0, VGLAdpInfo.va_window_size, PROT_READ|PROT_WRITE,
+		       MAP_FILE, 0, 0);
+  if (VGLMem == MAP_FAILED) {
+    int err = errno;
+    VGLEnd();
+#ifdef LIBVGL_DEBUG
+    fprintf(logfd, "mmap failed, %s(%d)\n", strerror(err), err);
+#endif
+    return -8;
+  }
+  VGLDisplay->Bitmap = VGLMem;
+
+  VGLSavePalette();
+
+#ifdef LIBVGL_DEBUG
+  fprintf(logfd, "va_line_width:%d\n", VGLAdpInfo.va_line_width);
+  fprintf(logfd, "VGL Xsize:%d, Ysize:%d, VXsize:%d, VYsize:%d\n",
+	  VGLDisplay->Xsize, VGLDisplay->Ysize, 
+	  VGLDisplay->VXsize, VGLDisplay->VYsize);
+#endif
+
+  smode.mode = VT_PROCESS;
+  smode.waitv = 0;
+  smode.relsig = SIGUSR1;
+  smode.acqsig = SIGUSR1;
+  smode.frsig  = SIGINT;	
+  if (ioctl(0, VT_SETMODE, &smode)) {
+    VGLEnd();
+    return -9;
+  }
+  VGLClear(VGLDisplay, 0);
+  return 0;
+}
+
+void
+VGLCheckSwitch()
+{
+  if (VGLAbortPending) {
+    VGLEnd();
+    exit(0);
+  }
+  while (VGLSwitchPending) {
+    unsigned int offset;
+    unsigned int len;
+    int i;
+
+    VGLSwitchPending = 0;
+    if (VGLOnDisplay) {
+      ioctl(0, KDENABIO, 0);
+      ioctl(0, KDSETMODE, KD_GRAPHICS);
+      ioctl(0, VGLMode, 0);
+      VGLCurWindow = 0;
+      VGLMem = (byte*)mmap(0, VGLAdpInfo.va_window_size, PROT_READ|PROT_WRITE,
+			   MAP_FILE, 0, 0);
+
+      /* XXX: what if mmap() has failed! */
+      VGLDisplay->Type = VIDBUF8;	/* XXX */
+      switch (VGLModeInfo.vi_mem_model) {
+      case V_INFO_MM_PLANAR:
+	if (VGLModeInfo.vi_depth == 4 && VGLModeInfo.vi_planes == 4) {
+	  if (VGLBufSize/VGLModeInfo.vi_planes > VGLAdpInfo.va_window_size)
+	    VGLDisplay->Type = VIDBUF4S;
+	  else
+	    VGLDisplay->Type = VIDBUF4;
+	} else {
+	  /* shouldn't be happening */
+	}
+        break;
+      case V_INFO_MM_PACKED:
+	if (VGLModeInfo.vi_depth == 8) {
+	  if (VGLBufSize/VGLModeInfo.vi_planes > VGLAdpInfo.va_window_size)
+	    VGLDisplay->Type = VIDBUF8S;
+	  else
+	    VGLDisplay->Type = VIDBUF8;
+	} else {
+	  /* shouldn't be happening */
+	  VGLDisplay->Type = VIDDIRECT;
+	}
+        break;
+      case V_INFO_MM_VGAX:
+	VGLDisplay->Type = VIDBUF8X;
+	break;
+      case V_INFO_MM_DIRECT:
+	VGLDisplay->Type = VIDDIRECT;
+	break;
+      default:
+	/* shouldn't be happening */
+        break;
+      }
+
+      VGLDisplay->Bitmap = VGLMem;
+      VGLDisplay->Xsize = VGLModeInfo.vi_width;
+      VGLDisplay->Ysize = VGLModeInfo.vi_height;
+      VGLSetVScreenSize(VGLDisplay, VGLDisplay->VXsize, VGLDisplay->VYsize);
+      VGLPanScreen(VGLDisplay, VGLDisplay->Xorigin, VGLDisplay->Yorigin);
+      switch (VGLDisplay->Type) {
+      case VIDBUF4S:
+	outb(0x3c6, 0xff);
+	outb(0x3ce, 0x01); outb(0x3cf, 0x00);		/* set/reset enable */
+	outb(0x3ce, 0x08); outb(0x3cf, 0xff);		/* bit mask */
+	for (offset = 0; offset < VGLBufSize/VGLModeInfo.vi_planes;
+	     offset += len) {
+	  VGLSetSegment(offset);
+	  len = min(VGLBufSize/VGLModeInfo.vi_planes - offset,
+		    VGLAdpInfo.va_window_size);
+	  for (i = 0; i < VGLModeInfo.vi_planes; i++) {
+	    outb(0x3c4, 0x02);
+	    outb(0x3c5, 0x01<<i);
+	    bcopy(&VGLBuf[i*VGLBufSize/VGLModeInfo.vi_planes + offset],
+		  VGLMem, len);
+	  }
+	}
+	break;
+      case VIDBUF4:
+      case VIDBUF8X:
+	outb(0x3c6, 0xff);
+	outb(0x3ce, 0x01); outb(0x3cf, 0x00);		/* set/reset enable */
+	outb(0x3ce, 0x08); outb(0x3cf, 0xff);		/* bit mask */
+	for (i = 0; i < VGLModeInfo.vi_planes; i++) {
+	  outb(0x3c4, 0x02);
+	  outb(0x3c5, 0x01<<i);
+	  bcopy(&VGLBuf[i*VGLAdpInfo.va_window_size], VGLMem,
+		VGLAdpInfo.va_window_size);
+	}
+	break;
+      case VIDBUF8:
+      case VIDBUF8S:
+	for (offset = 0; offset < VGLBufSize; offset += len) {
+	  VGLSetSegment(offset);
+	  len = min(VGLBufSize - offset, VGLAdpInfo.va_window_size);
+          bcopy(&VGLBuf[offset], VGLMem, len);
+	}
+	break;
+      case VIDBUF15:	/* This is all guesswork - ches */
+      case VIDBUF16:
+      case VIDBUF24:
+      case VIDBUF32:
+fprintf(logfd, "*** restoring screen?\n");
+	outb(0x3c6, 0xff);
+	outb(0x3ce, 0x01); outb(0x3cf, 0x00);		/* set/reset enable */
+	outb(0x3ce, 0x08); outb(0x3cf, 0xff);		/* bit mask */
+	bcopy(&VGLBuf[VGLAdpInfo.va_window_size], VGLMem,
+		VGLAdpInfo.va_window_size);
+        break;
+       default:
+	abort();
+      }
+      VGLRestorePalette();
+      ioctl(0, VT_RELDISP, VT_ACKACQ);
+    }
+    else {
+      switch (VGLDisplay->Type) {
+      case VIDBUF4S:
+	for (offset = 0; offset < VGLBufSize/VGLModeInfo.vi_planes;
+	     offset += len) {
+	  VGLSetSegment(offset);
+	  len = min(VGLBufSize/VGLModeInfo.vi_planes - offset,
+		    VGLAdpInfo.va_window_size);
+	  for (i = 0; i < VGLModeInfo.vi_planes; i++) {
+	    outb(0x3ce, 0x04);
+	    outb(0x3cf, i);
+	    bcopy(VGLMem, &VGLBuf[i*VGLBufSize/VGLModeInfo.vi_planes + offset],
+		  len);
+	  }
+	}
+	break;
+      case VIDBUF4:
+      case VIDBUF8X:
+	/*
+	 * NOTE: the saved buffer is NOT in the MEMBUF format which 
+	 * the ordinary memory bitmap object is stored in. XXX
+	 */
+	for (i = 0; i < VGLModeInfo.vi_planes; i++) {
+	  outb(0x3ce, 0x04);
+	  outb(0x3cf, i);
+	  bcopy(VGLMem, &VGLBuf[i*VGLAdpInfo.va_window_size],
+		VGLAdpInfo.va_window_size);
+	}
+	break;
+      case VIDBUF8:
+      case VIDBUF8S:
+	for (offset = 0; offset < VGLBufSize; offset += len) {
+	  VGLSetSegment(offset);
+	  len = min(VGLBufSize - offset, VGLAdpInfo.va_window_size);
+          bcopy(VGLMem, &VGLBuf[offset], len);
+	}
+	break;
+      case VIDBUF15:	/* XXX not supported at the moment.  Should be easy */
+      case VIDBUF16:
+      case VIDBUF24:
+      case VIDBUF32:
+        fprintf(logfd, "restore to backing store (?) not supported\n");
+      default:
+	abort();
+      }
+      VGLMem = MAP_FAILED;
+      munmap(VGLDisplay->Bitmap, VGLAdpInfo.va_window_size);
+      ioctl(0, VGLOldMode, 0);
+      ioctl(0, KDSETMODE, KD_TEXT);
+      ioctl(0, KDDISABIO, 0);
+      ioctl(0, VT_RELDISP, VT_TRUE);
+      VGLDisplay->Bitmap = VGLBuf;
+      VGLDisplay->Type = MEMBUF;
+      VGLDisplay->Xsize = VGLDisplay->VXsize;
+      VGLDisplay->Ysize = VGLDisplay->VYsize;
+      while (!VGLOnDisplay) pause();
+    }
+  }
+}
+
+int
+VGLSetSegment(unsigned int offset)
+{
+  if (offset/VGLAdpInfo.va_window_size != VGLCurWindow) {
+    ioctl(0, CONS_SETWINORG, offset);		/* FBIO_SETWINORG */
+    VGLCurWindow = offset/VGLAdpInfo.va_window_size;
+  }
+  return (offset%VGLAdpInfo.va_window_size);
+}
+
+int
+VGLSetVScreenSize(VGLBitmap *object, int VXsize, int VYsize)
+{
+  if (VXsize < object->Xsize || VYsize < object->Ysize)
+    return -1;
+  if (object->Type == MEMBUF)
+    return -1;
+  if (ioctl(0, FBIO_SETLINEWIDTH, &VXsize))
+    return -1;
+  ioctl(0, CONS_ADPINFO, &VGLAdpInfo);	/* FBIO_ADPINFO */
+  object->VXsize = VGLAdpInfo.va_line_width
+			   *8/(VGLModeInfo.vi_depth/VGLModeInfo.vi_planes);
+  object->VYsize = VGLBufSize/VGLModeInfo.vi_planes/VGLAdpInfo.va_line_width;
+  if (VYsize < object->VYsize)
+    object->VYsize = VYsize;
+
+#ifdef LIBVGL_DEBUG
+  fprintf(logfd, "new size: VGLXsize:%d, Ysize:%d, VXsize:%d, VYsize:%d\n",
+	  object->Xsize, object->Ysize, object->VXsize, object->VYsize);
+#endif
+
+  return 0;
+}
+
+int
+VGLPanScreen(VGLBitmap *object, int x, int y)
+{
+  video_display_start_t origin;
+
+  if (x < 0 || x + object->Xsize > object->VXsize
+      || y < 0 || y + object->Ysize > object->VYsize)
+    return -1;
+  if (object->Type == MEMBUF)
+    return 0;
+  origin.x = x;
+  origin.y = y;
+  if (ioctl(0, FBIO_SETDISPSTART, &origin))
+    return -1;
+  object->Xorigin = x;
+  object->Yorigin = y;
+
+#ifdef LIBVGL_DEBUG
+  fprintf(logfd, "new origin: (%d, %d)\n", x, y);
+#endif
+
+  return 0;
+}

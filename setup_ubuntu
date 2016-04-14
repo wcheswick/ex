@@ -1,0 +1,13 @@
+for pkg in pmake freeglut3-dev libjpeg-dev netpbm \
+	libnetpbm10-dev xfonts-100dpi pcf2bdf fftw3
+do
+	sudo apt-get install -y $pkg
+done
+
+mkdir ~ches/nex
+
+echo Start clean with
+echo	pmake clean
+
+
+# the make the system smaller, I removed gnome*, kde*, and libreoffice

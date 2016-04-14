@@ -1,0 +1,351 @@
+#!/bin/bash
+#
+prog=mkcd
+usage="$prog [-c]"
+#
+#	Make an Ubuntu livecd that boots to the various exhibits.
+#	This script attempts to implement the advice in
+#
+#	https://help.ubuntu.com/community/LiveCDCustomizationFromScratch
+#
+#	It is incremental, i.e., tries not to redo steps that have already been
+#	done.
+#
+#	This script uses sudo, and so does not have to run as root.
+#
+#	-c	clean build, redo the time-consuming steps
+
+
+CLEAN=""
+while true
+do
+	case "$1" in
+	-c)	CLEAN=true;
+		shift;;
+	-*)	echo "$usage" 1>&2
+		exit 1;;
+	*)
+		break;
+	esac
+done
+
+case $# in
+0)	;;
+*)	echo "$usage" 1>&2
+	exit 1
+esac
+
+
+set -e		# no errors tolerated, they'd be buried in crufty printout
+
+WRKDIR=/var/tmp/$prog
+WORK=$WRKDIR/work
+ARCH=`uname -m`
+
+#if [ -n "$CLEAN" ]
+#then
+#	echo "$prog:	Erasing work directory..." 1>&2
+#	sudo rm -rf $WRKDIR
+#fi
+
+IMAGE=$WORK/image
+mkdir -p $IMAGE
+
+CHROOT=$WORK/chroot
+mkdir -p $CHROOT
+
+# check for needed packages.
+
+sudo apt-get -qq -y install debootstrap
+
+NAME=`grep Release /etc/apt/sources.list |
+	sed 1q |
+	sed 's/^.*\][^ ]* *//' |
+	cut -f1 -d" "`
+FULLNAME=`grep Release /etc/apt/sources.list |
+	sed 's/^.*\[//' |
+	sed 's/\].*$//' |
+	sed 's/_/"/g'`
+
+echo "$prog:	Stupid ubuntu version name is '$NAME'" 1>&2
+
+# prepare the chroot directory
+
+cd $WORK
+
+echo "$prog:	building chroot..." 1>&2
+
+# skip a time-consuming step, unless this is a clean build
+
+if [ -n "$CLEAN" -o ! -d $CHROOT/bin ]
+then
+	# this "arch" below can't find $ARCH:
+	# I: Retrieving Release
+	# E: Invalid Release file, no entry for main/binary-x86_64/Packages
+
+#I: Retrieving apt-utils
+#W: Couldn't download package apt-utils
+#I: Retrieving cron
+#W: Couldn't download package cron
+#I: Retrieving dash
+#W: Couldn't download package dash
+#I: Retrieving debconf-i18n
+#W: Couldn't download package debconf-i18n
+
+	sudo debootstrap --include=apt --arch=i386 $NAME $CHROOT
+else
+	echo "$prog:	(skipping debootstrap step)" 1>&2
+fi
+
+
+echo "$prog:	mounting /dev into chroot..." 1>&2
+
+sudo mount --bind /dev $CHROOT/dev
+
+sudo cp /etc/hosts $CHROOT/etc/hosts
+sudo cp /etc/resolv.conf $CHROOT/etc/resolv.conf
+sudo cp /etc/apt/sources.list $CHROOT/etc/apt/sources.list
+
+sudo cp /etc/group $CHROOT/etc/group		# seems to make it happier
+hostname -s | sudo cp /dev/stdin $CHROOT/etc/hostname
+
+echo "$prog:	loading exhibit software..." 1>&2
+
+sudo rsync -a /home/nex $CHROOT/home
+sudo chown -R root:0 /home/nex
+
+
+echo "$prog:	switching to chroot..." 1>&2
+
+echo "$prog: ------------------------- begin intra-chroot script ------------" 1>&2
+sudo chroot $CHROOT /bin/bash <<!EOF || exit 13
+
+trap '	# Clean up chroot
+	set +e
+
+	rm -f /var/lib/dbus/machine-id
+	umount -lf /proc
+	umount -lf /sys
+	umount -lf /dev/pts
+' EXIT 1
+
+mount none -t proc /proc
+mount none -t sysfs /sys
+mount none -t devpts /dev/pts
+
+set -e		# no errors tolerated, they'd be buried in crufty printout
+
+export HOME=/root
+export LC_ALL=C
+# not sure if I need this, disabled:
+# sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 12345678  #Substitute "12345678" with the PPA's OpenPGP ID.
+apt-get -qq -y update
+apt-get -qq -y install --yes dbus
+dbus-uuidgen > /var/lib/dbus/machine-id
+dpkg-divert --local --rename --add /sbin/initctl
+
+ln -s /bin/true /sbin/initctl
+
+echo "$prog:	upgrading chroot..." 1>&2
+
+apt-get -qq -y upgrade
+
+# packages needed for live system:
+
+echo "$prog:	chroot packages..." 1>&2
+
+apt-get install -qq -y ubuntu-standard casper lupin-casper
+apt-get install -qq -y discover laptop-detect os-prober
+apt-get install -qq -y linux-generic 
+
+# This one brought up an alarming dialog box.  I told it not to install
+#	grub into my disk partitions.
+
+apt-get install -qq -y grub2 plymouth-x11
+
+# packages needed to build the exhibit software, which may never happen here
+
+echo "$prog:	exhibit packages..." 1>&2
+
+for p in pmake freeglut3-dev libjpeg-dev netpbm xfonts-100dpi pcf2bdf
+do
+	sudo apt-get install -qq -y $p
+done
+
+echo "$prog:	clean up chroot..." 1>&2
+
+# Clean up chroot
+
+rm /sbin/initctl
+dpkg-divert --rename --remove /sbin/initctl
+
+# Remove upgraded, old linux-kernels if more than one:
+
+count=`ls /boot/vmlinuz-2.6.**-**-generic | grep '[^ ]' | wc -l`
+if [ \$count -gt 1 ]; then
+dpkg -l 'linux-*' | sed '/^ii/!d;/'"$(uname -r | sed "s/\(.*\)-\([^0-9]\+\)/\1/")"'/d;s/^[^ ]* [^ ]* \([^ ]*\).*/\1/;/[0-9]/!d' | xargs sudo apt-get -qq -y purge
+fi
+
+apt-get -qq -y clean
+
+rm -rf /tmp/*
+
+rm /etc/resolv.conf
+!EOF
+echo "$prog: ------------------------- end of intra-chroot script ------------" 1>&2
+
+sudo umount $CHROOT/dev
+
+
+# Now, build the image:
+
+sudo apt-get -qq -y install syslinux squashfs-tools genisoimage sbm
+
+mkdir -p $IMAGE $IMAGE/casper $IMAGE/isolinux $IMAGE/install
+
+# need a kernel and an initrd that was built with the Casper scripts.
+
+sudo cp $CHROOT/boot/vmlinuz-2.6.**-**-generic image/casper/vmlinuz
+sudo cp  $CHROOT/boot/initrd.img-2.6.**-**-generic image/casper/initrd.gz
+
+# If you have a problem with vmlinuz and initrd copying -
+# maybe you have more than one from these files - you can using following commands:
+
+# for file in chroot/boot/vmlinuz-2.6.**-**-generic
+# do
+# 	cp $file image/casper/vmlinuz
+# done
+# 
+# for file in chroot/boot/initrd.img-2.6.**-**-generic
+# do
+# 	cp $file image/casper/initrd.gz
+# done
+
+cp /usr/lib/syslinux/isolinux.bin image/isolinux/
+
+cp /boot/memtest86+.bin image/install/memtest
+cp /boot/sbm.img image/install/
+
+cat >$IMAGE/isolinux/isolinux.txt <<!EOF
+splash.rle
+
+************************************************************************
+
+This is an Ubuntu Remix Live CD.
+
+For the default live system, enter "live".  To run memtest86+, enter "memtest"
+
+Actually, it is just a test.
+
+************************************************************************
+!EOF
+
+
+# Boot loader configuration:
+
+cat >$IMAGE/isolinux/isolinux.cfg <<!EOF
+DEFAULT live
+LABEL live
+  menu label ^Start or install Ubuntu
+  kernel /casper/vmlinuz
+  append  file=/cdrom/preseed/ubuntu.seed boot=casper initrd=/casper/initrd.gz quiet splash --
+LABEL ex
+  menu label ^Science museum exhibits
+  kernel /casper/vmlinuz
+  append  boot=casper integrity-check initrd=/casper/initrd.gz quiet splash --
+LABEL check
+  menu label ^Check CD for defects
+  kernel /casper/vmlinuz
+  append  boot=casper integrity-check initrd=/casper/initrd.gz quiet splash --
+LABEL memtest
+  menu label ^Memory test
+  kernel /install/memtest
+  append -
+LABEL hd
+  menu label ^Boot from first hard disk
+  localboot 0x80
+  append -
+DISPLAY isolinux.txt
+TIMEOUT 300
+PROMPT 1 
+
+#prompt flag_val
+# 
+# If flag_val is 0, display the "boot:" prompt 
+# only if the Shift or Alt key is pressed,
+# or Caps Lock or Scroll lock is set (this is the default).
+# If  flag_val is 1, always display the "boot:" prompt.
+#  http://linux.die.net/man/1/syslinux   syslinux manpage 
+!EOF
+
+### XXX Don't forget to pick the correct extension for your initrd (initrd.gz or initrd.lz).
+
+# Create manifest:
+
+sudo chroot $CHROOT dpkg-qquery -W --showformat='${Package} ${Version}\n' |
+	sudo tee $IMAGE/casper/filesystem.manifest
+
+sudo cp -v $IMAGE/casper/filesystem.manifest $IMAGE/casper/filesystem.manifest-desktop
+
+REMOVE='ubiquity ubiquity-frontend-gtk ubiquity-frontend-kde casper lupin-casper live-initramfs user-setup discover1 xresprobe os-prober libdebian-installer4'
+for i in $REMOVE 
+do
+        sudo sed -i "/${i}/d" $IMAGE/casper/filesystem.manifest-desktop
+done
+
+
+# Compress the chroot
+
+sudo mksquashfs $CHROOT $IMAGE/casper/filesystem.squashfs -e boot
+
+cat >$IMAGE/README.diskdefines <<!EOF
+#define DISKNAME  Ubuntu "$NAME" - Release $ARCH **Remix**
+#define TYPE  binary
+#define TYPEbinary  1
+#define ARCH  $ARCH
+#define ARCH$ARCH  1
+#define DISKNUM  1
+#define DISKNUM1  1
+#define TOTALNUM  0
+#define TOTALNUM0  1
+!EOF
+
+#	Create an empty file named "ubuntu" and a hidden ".disk" folder.
+#	This is needed to make the USB Creator work with this custom iso
+#	image. Without this the image will still boot but the USB creator
+#	will not recognize the image as an Ubuntu Cd and refuse to use it.
+#	Also, create the following files with the pertinent information:
+
+touch $IMAGE/ubuntu
+
+mkdir $IMAGE/.disk
+cd $IMAGE/.disk
+touch base_installable
+echo "full_cd/single" > cd_type
+echo '$FULLNAME' > info
+echo "http//ubuntu-rescue-remix.org" > release_notes_url
+cd ../..
+
+# calculate MD5
+
+sudo -s <<!EOF
+(cd $IMAGE && find . -type f -print0 |
+	xargs -0 md5sum |
+	grep -v "\./md5sum.txt" > md5sum.txt
+)
+!EOF
+
+# Create ISO image
+
+cd $IMAGE
+sudo mkisofs -r -V "$IMAGE_NAME" -cache-inodes -J -l -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table -o ../ubuntu-remix.iso .
+cd ..
+
+
+# We can make a bootable USB thumbdrive here, but not yet.
+# It is also possible (with USB) to make a persistent data partition,
+# which would be good for configuration options.
+
+
+echo "$prog:	to burn the CD:" 1>&2
+echo "wodim -v -data $WORK/ubuntu-remix.iso: 1>&2

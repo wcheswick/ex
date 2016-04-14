@@ -1,0 +1,93 @@
+#!/bin/sh
+#
+prog=mkpackage
+usage="$prog pkg pkgfile"
+#
+#	Create a FreeBSD package out of the exhibit software.
+#	This is useful for FreeBSD distribution, and it helps make
+#	a bootable freesbie disk.  One needs to do a
+#		make install
+#	of ex first, because this gets the lists of files out of the
+#	destination directories.
+
+TMP=/var/tmp/$prog
+TARGET=/usr/local/lib
+EX=~ches/proj/ex
+
+mkdir -p $TMP
+
+case $# in
+2)	pkg=$1
+	pkgfile=$2;;
+*)	echo "$usage" 1>&2
+	exit 1
+esac
+
+# make install is needed for this
+
+cat <<!EOF >$TMP/short
+Science museum hands-on exhibits
+!EOF
+
+cat <<!EOF >$TMP/deinstall
+rm -rf ${TARGET}
+!EOF
+
+cat <<!EOF >$TMP/pkg-descr
+Several open source hands-on science museum exhibits.  These are designed
+roughly ten-year olds, but I hope are fun for all ages.  Many of the exhibits
+require extra hardware, such as a video source and a cheap Hauppauge video
+card, or perhaps a microphone and working audio. This software runs in VESA
+display mode, which requires a small kernel mod to FreeBSD (included).
+
+Live CD versions can be created, so they
+can be run on machines without touching the hard drives.
+
+More about this project is available at http://www.cheswick.com/ches/ex/
+!EOF
+
+cat <<!EOF >$TMP/pkg-plist
+@name	$pkg
+`cd $EX; find bin -type f -print`
+`cd $TARGET; find ex -type f -print | egrep -v '(CVS|/\.)'`
+`cd $TARGET; find ex -depth -type d -print |
+	while read dir
+	do
+		echo "@dirrm $dir"
+	done`
+@pkgdep netpbm
+@pkgdep libglut
+@pkgdep fftw
+@pkgdep libaudiofile
+@pkgdep pcf2bdf
+@pkgdep sox
+@pkgdep rsync
+@pkgdep ImageMagick
+!EOF
+
+exit	#############
+
+cat <<!EOF >$TMP/plist
+@name	$pkg
+@cwd $TARGET
+`(cd $TARGET; find * -type f -print)`
+!EOF
+
+pkg_create \
+	-c $TMP/short \
+	-d $TMP/pkg-descr \
+	-v \
+	-o science/$pkg \
+	-f $TMP/plist \
+	-k $TMP/deinstall \
+	$pkgfile
+
+exit
+@pkgdep netpbm
+@pkgdep libglut
+@pkgdep fftw
+@pkgdep libaudiofile
+@pkgdep pcf2bdf
+@pkgdep sox
+@pkgdep rsync
+@pkgdep ImageMagick

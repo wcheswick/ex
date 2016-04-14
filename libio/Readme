@@ -1,0 +1,6 @@
+The text processing is supplied by the truetype2 libraries and fontset.
+This is a clean interface to a glorious set of decent typefaces.
+They can even render text right into our VGA buffer, and they
+even agree that the origin is on the lower left.
+
+Freetype documentation is at http://freetype.sourceforge.net/freetype2/docs/
