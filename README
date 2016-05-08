@@ -1,0 +1,25 @@
+This is my shot at a set of hands-on science museum exhibit software.
+Some of these have actually run in read science or children museums.
+
+lcs runs at the Liberty Science Center across the river from New York
+City.  The original version of this was a Photoshop-style photo
+munger, installed before Photoshop existed.  It ran for about twenty
+years, a very popular exhibit.  
+
+During a renovation they asked for an improvement, and I changed
+the lsc exhibit to run on live video.  That version is in here.
+
+Chat ran at the Chattannooga Children's Discovery Museum, a simplified
+version of lsc that tries to emulate the style of famous artists with
+algorithms. 
+
+All of these worked when last tested, but there may be bitrot here.
+
+The code last compiled on a FreeBSD machine, with a number of ports
+installed.  Check out the Makefile for clues to building the ports and
+software. When last tried, all these routines compiled completely and
+cleanly, but port interfaces and compiler options change.
+
+Bill Cheswick
+7 May 2016
+ches@cheswick.com
